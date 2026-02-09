@@ -111,15 +111,32 @@ local function run_program(file_info, lang, executable, input_content)
 end
 
 function M.run(state)
-  -- Determine the current main buffer (in case user switched files)
-  local main_buf = state.main_buf
+  -- ALWAYS get the current buffer from the main window
+  -- This ensures we run whatever file is currently visible in the main pane
+  local main_buf = nil
+  
   if state.main_win and vim.api.nvim_win_is_valid(state.main_win) then
     main_buf = vim.api.nvim_win_get_buf(state.main_win)
-    state.main_buf = main_buf -- keep stored state in sync
+    state.main_buf = main_buf -- Update stored state
+  else
+    -- Fallback to stored buffer if window is invalid
+    main_buf = state.main_buf
+  end
+  
+  if not main_buf or not vim.api.nvim_buf_is_valid(main_buf) then
+    vim.notify("No valid buffer to run", vim.log.levels.ERROR)
+    return
+  end
+  
+  -- Check if the buffer is an actual file (not I/O buffer or special buffer)
+  local buftype = vim.api.nvim_buf_get_option(main_buf, 'buftype')
+  if buftype ~= '' then
+    vim.notify("Current buffer is not a file", vim.log.levels.ERROR)
+    return
   end
 
   -- Save the main buffer first (if modified)
-  if main_buf and vim.api.nvim_buf_is_valid(main_buf) and vim.api.nvim_buf_get_option(main_buf, 'modified') then
+  if vim.api.nvim_buf_get_option(main_buf, 'modified') then
     vim.api.nvim_buf_call(main_buf, function()
       vim.cmd('write')
     end)
@@ -145,7 +162,7 @@ function M.run(state)
   local input_content = buffers.get_input_content(state.input_buf)
   
   -- Show compilation message
-  buffers.set_output_content(state.output_buf, "Compiling...")
+  buffers.set_output_content(state.output_buf, "Compiling " .. file_info.name .. "...")
   vim.cmd('redraw')
   
   -- Compile if needed
@@ -153,12 +170,12 @@ function M.run(state)
   
   if not success then
     buffers.set_output_content(state.output_buf, "[Compilation Error]\n\n" .. result)
-    vim.notify("Compilation failed", vim.log.levels.ERROR)
+    vim.notify("Compilation failed: " .. file_info.name, vim.log.levels.ERROR)
     return
   end
   
   -- Show running message
-  buffers.set_output_content(state.output_buf, "Running...")
+  buffers.set_output_content(state.output_buf, "Running " .. file_info.name .. "...")
   vim.cmd('redraw')
   
   -- Run program
@@ -166,13 +183,13 @@ function M.run(state)
   
   if not success then
     buffers.set_output_content(state.output_buf, "[Error]\n\n" .. result)
-    vim.notify("Execution failed", vim.log.levels.ERROR)
+    vim.notify("Execution failed: " .. file_info.name, vim.log.levels.ERROR)
     return
   end
   
   -- Display output (clean, no headers)
   buffers.set_output_content(state.output_buf, result)
-  vim.notify("Execution completed", vim.log.levels.INFO)
+  vim.notify("Execution completed: " .. file_info.name, vim.log.levels.INFO)
 end
 
 return M
