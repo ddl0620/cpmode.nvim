@@ -111,26 +111,50 @@ local function run_program(file_info, lang, executable, input_content)
 end
 
 function M.run(state)
-  -- Get the buffer from the main window (the code pane)
-  if not state.main_win or not vim.api.nvim_win_is_valid(state.main_win) then
-    vim.notify("CP Mode main window is invalid", vim.log.levels.ERROR)
+  -- Strategy: Run the file from the current window if it's a code file,
+  -- otherwise fall back to the main window
+  
+  local current_win = vim.api.nvim_get_current_win()
+  local target_buf = nil
+  
+  -- Check if current window is one of the I/O windows
+  if current_win == state.input_win or current_win == state.output_win then
+    -- We're in an I/O window, use the main window's buffer
+    if state.main_win and vim.api.nvim_win_is_valid(state.main_win) then
+      target_buf = vim.api.nvim_win_get_buf(state.main_win)
+    end
+  else
+    -- We're in a code window (could be main or a split), use current buffer
+    target_buf = vim.api.nvim_get_current_buf()
+  end
+  
+  if not target_buf or not vim.api.nvim_buf_is_valid(target_buf) then
+    vim.notify("No valid buffer to run", vim.log.levels.ERROR)
     return
   end
   
-  local main_buf = vim.api.nvim_win_get_buf(state.main_win)
+  -- Check if it's an I/O buffer
+  if target_buf == state.input_buf or target_buf == state.output_buf then
+    vim.notify("Cannot run I/O buffer. Focus on a code file.", vim.log.levels.ERROR)
+    return
+  end
   
-  -- Update the stored state
-  state.main_buf = main_buf
+  -- Check if the buffer is an actual file
+  local buftype = vim.api.nvim_buf_get_option(target_buf, 'buftype')
+  if buftype ~= '' then
+    vim.notify("Current buffer is not a file", vim.log.levels.ERROR)
+    return
+  end
   
-  -- Save the main buffer first (if modified)
-  if vim.api.nvim_buf_get_option(main_buf, 'modified') then
-    vim.api.nvim_buf_call(main_buf, function()
+  -- Save the buffer first (if modified)
+  if vim.api.nvim_buf_get_option(target_buf, 'modified') then
+    vim.api.nvim_buf_call(target_buf, function()
       vim.cmd('write')
     end)
   end
   
   -- Get file info
-  local file_info = get_file_info(main_buf)
+  local file_info = get_file_info(target_buf)
   
   if file_info.path == '' then
     vim.notify("Please save the file first", vim.log.levels.ERROR)
@@ -148,35 +172,35 @@ function M.run(state)
   -- Get input
   local input_content = buffers.get_input_content(state.input_buf)
   
-  -- Show compilation message
-  buffers.set_output_content(state.output_buf, "Compiling...")
+  -- Show compilation message with filename
+  buffers.set_output_content(state.output_buf, "Compiling " .. file_info.name .. "...")
   vim.cmd('redraw')
   
   -- Compile if needed
   local success, result = compile(file_info, lang)
   
   if not success then
-    buffers.set_output_content(state.output_buf, "[Compilation Error]\n\n" .. result)
-    vim.notify("Compilation failed", vim.log.levels.ERROR)
+    buffers.set_output_content(state.output_buf, "[Compilation Error: " .. file_info.name .. "]\n\n" .. result)
+    vim.notify("Compilation failed: " .. file_info.name, vim.log.levels.ERROR)
     return
   end
   
-  -- Show running message
-  buffers.set_output_content(state.output_buf, "Running...")
+  -- Show running message with filename
+  buffers.set_output_content(state.output_buf, "Running " .. file_info.name .. "...")
   vim.cmd('redraw')
   
   -- Run program
   success, result = run_program(file_info, lang, result, input_content)
   
   if not success then
-    buffers.set_output_content(state.output_buf, "[Error]\n\n" .. result)
-    vim.notify("Execution failed", vim.log.levels.ERROR)
+    buffers.set_output_content(state.output_buf, "[Error: " .. file_info.name .. "]\n\n" .. result)
+    vim.notify("Execution failed: " .. file_info.name, vim.log.levels.ERROR)
     return
   end
   
   -- Display output (clean, no headers)
   buffers.set_output_content(state.output_buf, result)
-  vim.notify("Execution completed", vim.log.levels.INFO)
+  vim.notify("✓ " .. file_info.name, vim.log.levels.INFO)
 end
 
 return M
