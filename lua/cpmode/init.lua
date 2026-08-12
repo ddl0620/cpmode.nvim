@@ -40,7 +40,20 @@ function M.enable()
   local filetype = vim.bo[current_buf].filetype
 
   if vim.bo[current_buf].buftype ~= '' or filetype == 'alpha' or filetype == 'NvimTree' then
-    vim.notify('Please open a file first', vim.log.levels.WARN)
+    -- Common case: Neovim was started in an empty directory, so there is no
+    -- file to attach the layout to yet. Say how to get one.
+    vim.notify(
+      'CP Mode needs a file. Create one with `:e A.cpp`, then run :Cpm again.',
+      vim.log.levels.WARN
+    )
+    return
+  end
+
+  if vim.api.nvim_buf_get_name(current_buf) == '' then
+    vim.notify(
+      'CP Mode needs a saved file. Name this buffer with `:saveas A.cpp` first.',
+      vim.log.levels.WARN
+    )
     return
   end
 
