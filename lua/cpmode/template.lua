@@ -4,7 +4,7 @@ local config = require('cpmode.config')
 
 function M.insert_template()
   local buf = vim.api.nvim_get_current_buf()
-  local filetype = vim.api.nvim_buf_get_option(buf, 'filetype')
+  local filetype = vim.bo[buf].filetype
   
   -- Get the template for the current filetype
   local template = config.options.templates[filetype]

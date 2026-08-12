@@ -1,33 +1,34 @@
 local M = {}
 
-function M.create_input_buffer()
-  local buf = vim.api.nvim_create_buf(false, true) -- unlisted, scratch buffer
-  
-  vim.api.nvim_buf_set_option(buf, 'buftype', 'nofile')
-  vim.api.nvim_buf_set_option(buf, 'bufhidden', 'hide')
-  vim.api.nvim_buf_set_option(buf, 'swapfile', false)
-  vim.api.nvim_buf_set_name(buf, 'CP-Input')
-  
-  -- Set filetype for syntax highlighting (optional)
-  vim.api.nvim_buf_set_option(buf, 'filetype', 'text')
-  
+local function create_scratch(name, opts)
+  local buf = vim.api.nvim_create_buf(false, true) -- unlisted, so it stays out of the tab bar
+
+  vim.bo[buf].buftype = 'nofile'
+  vim.bo[buf].bufhidden = 'hide'
+  vim.bo[buf].swapfile = false
+  vim.bo[buf].filetype = 'text'
+  vim.api.nvim_buf_set_name(buf, name)
+
+  if opts and opts.readonly then
+    vim.bo[buf].modifiable = false
+  end
+
   return buf
+end
+
+function M.create_input_buffer()
+  return create_scratch('CP-Input')
 end
 
 function M.create_output_buffer()
-  local buf = vim.api.nvim_create_buf(false, true)
-  
-  vim.api.nvim_buf_set_option(buf, 'buftype', 'nofile')
-  vim.api.nvim_buf_set_option(buf, 'bufhidden', 'hide')
-  vim.api.nvim_buf_set_option(buf, 'swapfile', false)
-  vim.api.nvim_buf_set_option(buf, 'modifiable', false) -- Read-only initially
-  vim.api.nvim_buf_set_name(buf, 'CP-Output')
-  vim.api.nvim_buf_set_option(buf, 'filetype', 'text')
-  
-  return buf
+  return create_scratch('CP-Output', { readonly = true })
 end
 
 function M.get_input_content(buf)
+  if not buf or not vim.api.nvim_buf_is_valid(buf) then
+    return ''
+  end
+
   local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
   if #lines == 0 then
     return ''
@@ -39,20 +40,25 @@ function M.get_input_content(buf)
 end
 
 function M.set_output_content(buf, content)
-  vim.api.nvim_buf_set_option(buf, 'modifiable', true)
-  
-  local lines = vim.split(content, '\n')
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-  
-  vim.api.nvim_buf_set_option(buf, 'modifiable', false)
+  if not buf or not vim.api.nvim_buf_is_valid(buf) then
+    return
+  end
+
+  vim.bo[buf].modifiable = true
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(content, '\n'))
+  vim.bo[buf].modifiable = false
 end
 
 function M.clear_buffer(buf, opts)
-  local readonly = opts and opts.readonly
-  vim.api.nvim_buf_set_option(buf, 'modifiable', true)
+  if not buf or not vim.api.nvim_buf_is_valid(buf) then
+    return
+  end
+
+  vim.bo[buf].modifiable = true
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, {})
-  if readonly then
-    vim.api.nvim_buf_set_option(buf, 'modifiable', false)
+
+  if opts and opts.readonly then
+    vim.bo[buf].modifiable = false
   end
 end
 

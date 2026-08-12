@@ -15,6 +15,27 @@ M.options = {
     python = nil, -- No compilation needed
   },
   
+  -- Compilation commands used when starting a debug session.
+  -- -O0 keeps the line table honest (no reordered/elided statements) and
+  -- -g emits the symbols the variables panel reads.
+  -- _GLIBCXX_ASSERTIONS adds bounds checking without changing STL types,
+  -- so gdb's pretty printers keep working.
+  debug_compile_commands = {
+    cpp = "g++ -std=c++17 -g -O0 -Wall -D_GLIBCXX_ASSERTIONS %s -o %s",
+    c = "gcc -std=c11 -g -O0 -Wall %s -o %s",
+    java = nil,
+    python = nil,
+  },
+
+  -- Suffix for the debug executable, so it never clobbers the release build.
+  debug_suffix = "_dbg",
+
+  -- Debugger binary. gdb >= 14 speaks DAP natively via `gdb -i dap`.
+  debugger = "gdb",
+
+  -- Break at the first line of main() automatically when a session starts.
+  debug_stop_at_main = true,
+
   -- Run commands for different languages
   run_commands = {
     cpp = "./%s",

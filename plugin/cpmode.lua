@@ -6,19 +6,30 @@ if vim.g.loaded_cpmode then
 end
 vim.g.loaded_cpmode = 1
 
--- Create user commands
-vim.api.nvim_create_user_command('Cpm', function()
+local function cmd(name, fn, desc)
+  vim.api.nvim_create_user_command(name, fn, { desc = desc })
+end
+
+cmd('Cpm', function()
   require('cpmode').toggle()
-end, {})
+end, 'Toggle competitive programming layout')
 
-vim.api.nvim_create_user_command('Cpru', function()
+cmd('Cpru', function()
   require('cpmode').run()
-end, {})
+end, 'Compile and run the current file with the input pane as stdin')
 
-vim.api.nvim_create_user_command('Cpre', function()
+cmd('Cpre', function()
   require('cpmode').reset_io()
-end, {})
+end, 'Clear the input and output panes')
 
-vim.api.nvim_create_user_command('Cpt', function()
+cmd('Cpt', function()
   require('cpmode.template').insert_template()
-end, {})
+end, 'Insert the language template at the cursor')
+
+cmd('Cpdb', function()
+  require('cpmode').debug()
+end, 'Build a debug binary and start a gdb DAP session')
+
+cmd('Cpi', function()
+  require('cpmode').focus_input()
+end, 'Jump to the input pane')

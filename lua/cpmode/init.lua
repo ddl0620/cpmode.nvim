@@ -8,20 +8,20 @@ M.state = {
   main_win = nil,
   input_win = nil,
   output_win = nil,
-  original_layout = nil,
 }
 
 local config = require('cpmode.config')
 local layout = require('cpmode.layout')
-local runner = require('cpmode.runner')
 local buffers = require('cpmode.buffers')
 
--- Setup function for lazy.nvim
 function M.setup(opts)
   config.setup(opts)
 end
 
--- Toggle CP mode
+function M.is_active()
+  return M.state.active
+end
+
 function M.toggle()
   if M.state.active then
     M.disable()
@@ -30,67 +30,56 @@ function M.toggle()
   end
 end
 
--- Enable CP mode
 function M.enable()
   if M.state.active then
-    vim.notify("CP Mode already active", vim.log.levels.WARN)
+    vim.notify('CP Mode already active', vim.log.levels.WARN)
     return
   end
 
-  -- Store current buffer as main buffer
   local current_buf = vim.api.nvim_get_current_buf()
-  
-  -- Don't activate if we're in alpha or nvim-tree
-  local buftype = vim.api.nvim_buf_get_option(current_buf, 'buftype')
-  local filetype = vim.api.nvim_buf_get_option(current_buf, 'filetype')
-  
-  if buftype ~= '' or filetype == 'alpha' or filetype == 'NvimTree' then
-    vim.notify("Please open a file first", vim.log.levels.WARN)
+  local filetype = vim.bo[current_buf].filetype
+
+  if vim.bo[current_buf].buftype ~= '' or filetype == 'alpha' or filetype == 'NvimTree' then
+    vim.notify('Please open a file first', vim.log.levels.WARN)
     return
   end
 
   M.state.main_buf = current_buf
-
-  -- Create I/O buffers
   M.state.input_buf = buffers.create_input_buffer()
   M.state.output_buf = buffers.create_output_buffer()
 
-  -- Create layout
   layout.create_layout(M.state)
 
   M.state.active = true
-  
-  vim.notify("CP Mode enabled", vim.log.levels.INFO)
+  vim.notify('CP Mode enabled', vim.log.levels.INFO)
 end
 
--- Disable CP mode
 function M.disable()
   if not M.state.active then
     return
   end
 
-  -- Close I/O windows
-  if M.state.input_win and vim.api.nvim_win_is_valid(M.state.input_win) then
-    vim.api.nvim_win_close(M.state.input_win, true)
-  end
-  if M.state.output_win and vim.api.nvim_win_is_valid(M.state.output_win) then
-    vim.api.nvim_win_close(M.state.output_win, true)
+  -- Stop the autocmds before tearing windows down, otherwise they fire
+  -- against windows that are in the middle of being closed.
+  layout.teardown()
+  M.state.active = false
+
+  for _, win in ipairs({ M.state.input_win, M.state.output_win }) do
+    if win and vim.api.nvim_win_is_valid(win) then
+      pcall(vim.api.nvim_win_close, win, true)
+    end
   end
 
-  -- Delete I/O buffers
-  if M.state.input_buf and vim.api.nvim_buf_is_valid(M.state.input_buf) then
-    vim.api.nvim_buf_delete(M.state.input_buf, { force = true })
-  end
-  if M.state.output_buf and vim.api.nvim_buf_is_valid(M.state.output_buf) then
-    vim.api.nvim_buf_delete(M.state.output_buf, { force = true })
+  for _, buf in ipairs({ M.state.input_buf, M.state.output_buf }) do
+    if buf and vim.api.nvim_buf_is_valid(buf) then
+      pcall(vim.api.nvim_buf_delete, buf, { force = true })
+    end
   end
 
-  -- Focus main window
   if M.state.main_win and vim.api.nvim_win_is_valid(M.state.main_win) then
     vim.api.nvim_set_current_win(M.state.main_win)
   end
 
-  M.state.active = false
   M.state.main_buf = nil
   M.state.input_buf = nil
   M.state.output_buf = nil
@@ -98,29 +87,48 @@ function M.disable()
   M.state.input_win = nil
   M.state.output_win = nil
 
-  vim.notify("CP Mode disabled", vim.log.levels.INFO)
+  vim.notify('CP Mode disabled', vim.log.levels.INFO)
 end
 
--- Run the current file
+-- Move the cursor to the input pane so a test case can be typed straight away.
+function M.focus_input()
+  if not M.state.active then
+    vim.notify('CP Mode not active', vim.log.levels.WARN)
+    return
+  end
+  if M.state.input_win and vim.api.nvim_win_is_valid(M.state.input_win) then
+    vim.api.nvim_set_current_win(M.state.input_win)
+  end
+end
+
+function M.focus_code()
+  if M.state.main_win and vim.api.nvim_win_is_valid(M.state.main_win) then
+    vim.api.nvim_set_current_win(M.state.main_win)
+  end
+end
+
 function M.run()
   if not M.state.active then
-    vim.notify("CP Mode not active. Use :CPMode first", vim.log.levels.WARN)
+    vim.notify('CP Mode not active. Use :Cpm first', vim.log.levels.WARN)
     return
   end
 
-  runner.run(M.state)
+  require('cpmode.runner').run(M.state)
 end
 
--- Reset I/O buffers
+function M.debug()
+  require('cpmode.debug').start()
+end
+
 function M.reset_io()
   if not M.state.active then
-    vim.notify("CP Mode not active", vim.log.levels.WARN)
+    vim.notify('CP Mode not active', vim.log.levels.WARN)
     return
   end
 
   buffers.clear_buffer(M.state.input_buf)
   buffers.clear_buffer(M.state.output_buf, { readonly = true })
-  vim.notify("I/O buffers reset", vim.log.levels.INFO)
+  vim.notify('I/O buffers reset', vim.log.levels.INFO)
 end
 
 return M
